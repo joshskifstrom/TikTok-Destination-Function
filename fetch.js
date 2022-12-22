@@ -20,30 +20,44 @@ let addMappingBody = {
   ],
 };
 
-httpRequest(addMappingBody);
+let settings = {
+  advertiserIds: "7178918106775994370",
+  idSchema: "EMAIL_SHA256",
+  accessToken: "49d3067637418943352b1ce489001deaad94d1ab",
+  audienceId: "167290896",
+  endpoint: "https://business-api.tiktok.com/open_api/v1.3/segment/mapping/",
+};
 
+httpRequest(addMappingBody, settings);
+
+//Lesson Learn try block catches fetch function errors. It does not catch http response errors. 
+//That's why the if statement is outside of the try block.
 //HTTP Request
-async function httpRequest(body) {
-  let endpoint =
-    "https://business-api.tiktok.com/open_api/v1.3/segment/mapping/";
+async function httpRequest(body, set) {
+  let endpoint = set.endpoint;
   let settings = {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Access-Token": "49d3067637418943352b1ce489001deaad94d1ab",
+      "Access-Token": set.accessToken,
     },
     body: JSON.stringify(body),
   };
+  
+  let res;
   try {
-    let response = await fetch(endpoint, settings);
-    console.log(response);
-    if (response.status == 200) return response.status;
-    else {
-      throw Error("ERROR: " + response.status + " " + response.statusText);
-    }
-  } catch (error) {
+    res = await fetch(endpoint, settings);
+  } catch (err) {
     // Retry on connection error
-    //throw new RetryError(error.message);
-    console.log(error.message);
+    throw new RetryError(`RetryError ${err}`)
+  }
+  console.log(res);
+  if (res.status == 200) return res.json();
+  if (res.status >= 500 || res.status === 429) {
+    // Retry on 5xx and 429s (ratelimits)
+    throw new RetryError(`RetryError ${res.status} ${res.statusText}`)
+  } else {
+    //throw new ValidationError(`ValidationError ${res.status} ${res.statusText}`)
+    throw new Error(`ValidationError ${res.status} ${res.statusText}`)
   }
 }

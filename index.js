@@ -195,6 +195,7 @@ function onBatch(body, settings) {
   console.log("addMappingBody", JSON.stringify(addMappingBody, null, 2));
   //console.log("deleteMappingBody", deleteMappingBody.batch_data.length);
 
+  //only send if there is data in addMappingBody or deleteMappingBody
   if (addMappingBody.batch_data.length > 0)
     httpRequest(addMappingBody, settings);
   if (deleteMappingBody.batch_data.length > 0)
@@ -224,15 +225,21 @@ async function httpRequest(body, set) {
     },
     body: JSON.stringify(body),
   };
+  
+  let res;
   try {
-    let response = await fetch(endpoint, settings);
-    console.log(response);
-    if (response.status == 200) return response.status;
-    else {
-      throw Error("ERROR: " + response.status + " " + response.statusText);
-    }
-  } catch (error) {
-    //Need to build retry logic
-    console.log(error.message);
+    res = await fetch(endpoint, settings);
+  } catch (err) {
+    // Retry on connection error
+    throw new RetryError(`RetryError ${err}`)
+  }
+  console.log(res);
+  if (res.status == 200) return res.json();
+  if (res.status >= 500 || res.status === 429) {
+    // Retry on 5xx and 429s (ratelimits)
+    throw new RetryError(`RetryError ${res.status} ${res.statusText}`)
+  } else {
+    //throw new ValidationError(`ValidationError ${res.status} ${res.statusText}`)
+    throw new Error(`ValidationError ${res.status} ${res.statusText}`)
   }
 }
