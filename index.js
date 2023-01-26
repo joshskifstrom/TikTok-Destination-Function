@@ -1,8 +1,11 @@
 import fetch from "node-fetch";
 import crypto from "crypto";
+import btoa from "btoa";
+import lodash from "lodash";
 
 let body = [
   {
+    anonymousId: "3cc730e6-60b6-4da7-861e-bcb463b9e8dd",
     context: {
       library: {
         name: "unknown",
@@ -32,10 +35,10 @@ let body = [
       email: "vortexdrift150@fake.com",
     },
     type: "identify",
-    userId: "ab4840a5-fd5e-4892-88eb-ebbf39b78247",
     writeKey: "8aVWE9WnRgWrDW6AIX4wrEJEVlFjiYkJ",
   },
   {
+    anonymousId: "7dd7f26a-759d-4fed-8fd5-1f7529eb06e8",
     context: {
       library: {
         name: "unknown",
@@ -65,10 +68,11 @@ let body = [
       email: "ijokmcx@fake.com",
     },
     type: "identify",
-    userId: "fde7bd62-093f-4383-903b-e8bb7369f90f",
+    userId: "358013",
     writeKey: "8aVWE9WnRgWrDW6AIX4wrEJEVlFjiYkJ",
   },
   {
+    anonymousId: "JOSH5140d27-a498-4c24-b9d9-a157172b315bc",
     context: {
       library: {
         name: "unknown",
@@ -98,10 +102,10 @@ let body = [
       email: "a0903939867@fake.com",
     },
     type: "identify",
-    userId: "ff3ca2d5-d44f-40ab-86ca-d127ae0adfad",
     writeKey: "8aVWE9WnRgWrDW6AIX4wrEJEVlFjiYkJ",
   },
   {
+    anonymousId: "ec293dcf-abff-46d0-8811-179d1d42e77a",
     context: {
       library: {
         name: "unknown",
@@ -131,27 +135,47 @@ let body = [
       email: "ryan.wang168168@gmail.com",
     },
     type: "identify",
-    userId: "dd55248e-934c-406c-8775-39d05a893027",
+    userId: "547161",
     writeKey: "8aVWE9WnRgWrDW6AIX4wrEJEVlFjiYkJ",
   },
 ];
 
 let settings = {
   advertiserIds: "7178918106775994370",
-  idSchema: "EMAIL_SHA256",
+  idSchema: ["EMAIL_SHA256", "PHONE_SHA256"],
   accessToken: "49d3067637418943352b1ce489001deaad94d1ab",
   audienceId: "167290896",
   endpoint: "https://business-api.tiktok.com/open_api/v1.3/segment/mapping/",
+  engageSpaceId: "spa_7NoLrHoQfgv2NzMpNucoPs",
+  engageAccessToken:
+    "VB6nH1QRiz_xEjdkKSvlFskk9FvtmMe38-MaVDTLjVT8tRCfor81gYw0VDXmApVXgkGOCMXeOs5jwv4Z3wmT9FB-7ECsOXyQWevg-Rzal-6mfhQIVjauTq3l_36t9f5pjyCTpZ-w0gecPWanJVgwpGJ-7htEkImEBpmRNDOcvOJcUYFQ_0H7f0yM_0hYNn_AzjxA7KeGxCYWFHUkVtc_XNIw1mXTLPG3p9SQrtUAt4d51gAv8xeK6sX5JM6_TwrOSK8Lhk_6nQhkpo6bd4QOf-yMT_Q=",
 };
 
 let addMappingArray = [];
 let deleteMappingArray = [];
 
-function onBatch(body, settings) {
+//Design Elements To Add
+// Phone Number --
+// Auto Create Audience
+// Auto Delete Audience?
+
+async function onBatch(body, settings) {
   //get computation key
   let computationKey = body[0].context.personas.computation_key;
+  for (const user of body) {
+    //if userId is not present use anonId to set externalId
+    let externalId;
+    if (!user.userId) {
+      externalId = `anonymous_id:${user.anonymousId}`;
+    } else {
+      externalId = `user_id:${user.userId}`;
+    }
 
-  let result = body.map(function (user) {
+    let phoneNumber = await (
+      await profileApiHttpRequest(externalId, settings)
+    ).toString();
+    console.log("Phone Number", phoneNumber);
+
     //update computation key to boolean value
     let computationKeyValue = user.traits[computationKey];
 
@@ -161,6 +185,12 @@ function onBatch(body, settings) {
       addMappingArray.push([
         {
           id: sha256Hash(user.traits.email), // This is the SHA256 of email for User 1
+          id_type: "EMAIL_SHA256",
+          audience_ids: [settings.audienceId],
+        },
+        {
+          id: sha256Hash(phoneNumber), // This is the SHA256 of phone for User 1
+          id_type: "PHONE_SHA256",
           audience_ids: [settings.audienceId],
         },
       ]);
@@ -168,11 +198,17 @@ function onBatch(body, settings) {
       deleteMappingArray.push([
         {
           id: sha256Hash(user.traits.email), // This is the SHA256 of email for User 1
+          id_type: "EMAIL_SHA256",
+          audience_ids: [settings.audienceId],
+        },
+        {
+          id: sha256Hash(phoneNumber), // This is the SHA256 of email for User 1
+          id_type: "PHONE_SHA256",
           audience_ids: [settings.audienceId],
         },
       ]);
     }
-  });
+  }
   //console.log("addMappingArray", addMappingArray);
   //console.log("deleteMappingArray", deleteMappingArray);
 
@@ -180,7 +216,7 @@ function onBatch(body, settings) {
   let addMappingBody = {
     advertiser_ids: [settings.advertiserIds],
     action: "add",
-    id_schema: [settings.idSchema],
+    id_schema: settings.idSchema,
     batch_data: addMappingArray,
   };
 
@@ -188,18 +224,17 @@ function onBatch(body, settings) {
   let deleteMappingBody = {
     advertiser_ids: [settings.advertiserIds],
     action: "delete",
-    id_schema: [settings.idSchema],
+    id_schema: settings.idSchema,
     batch_data: deleteMappingArray,
   };
 
   console.log("addMappingBody", JSON.stringify(addMappingBody, null, 2));
-  //console.log("deleteMappingBody", deleteMappingBody.batch_data.length);
 
   //only send if there is data in addMappingBody or deleteMappingBody
   if (addMappingBody.batch_data.length > 0)
-    httpRequest(addMappingBody, settings);
+    tiktokHttpRequest(addMappingBody, settings);
   if (deleteMappingBody.batch_data.length > 0)
-    httpRequest(deleteMappingBody, settings);
+    tiktokHttpRequest(deleteMappingBody, settings);
 }
 
 onBatch(body, settings);
@@ -215,7 +250,7 @@ function sha256Hash(value) {
 }
 
 //HTTP Request
-async function httpRequest(body, set) {
+async function tiktokHttpRequest(body, set) {
   let endpoint = set.endpoint;
   let settings = {
     method: "POST",
@@ -225,21 +260,68 @@ async function httpRequest(body, set) {
     },
     body: JSON.stringify(body),
   };
-  
+
   let res;
   try {
     res = await fetch(endpoint, settings);
   } catch (err) {
     // Retry on connection error
-    throw new RetryError(`RetryError ${err}`)
+    throw new RetryError(`RetryError ${err}`);
   }
   console.log(res);
   if (res.status == 200) return res.json();
   if (res.status >= 500 || res.status === 429) {
     // Retry on 5xx and 429s (ratelimits)
-    throw new RetryError(`RetryError ${res.status} ${res.statusText}`)
+    throw new RetryError(`RetryError ${res.status} ${res.statusText}`);
   } else {
     //throw new ValidationError(`ValidationError ${res.status} ${res.statusText}`)
-    throw new Error(`ValidationError ${res.status} ${res.statusText}`)
+    throw new Error(`ValidationError ${res.status} ${res.statusText}`);
+  }
+}
+
+async function profileApiHttpRequest(externalId, settings) {
+  let endpoint = `https://profiles.segment.com/v1/spaces/${settings.engageSpaceId}/collections/users/profiles/${externalId}/traits?limit=200`;
+
+  let profile_api_response = await fetch(endpoint, {
+    headers: {
+      //		headers: new Headers({ UPDATE FOR FUNCTION CODE
+      Authorization: "Basic " + btoa(settings.engageAccessToken + ":"),
+      "Content-Type": "application/json",
+    },
+    method: "GET",
+  });
+
+  if (profile_api_response.ok) {
+    let json = await profile_api_response.json();
+    let traits = json.traits;
+    let phone;
+
+    //check to see if phone number is a trait on the user
+    phone =
+      traits.phone | traits.phone_number | traits.mobile | traits.mobile_number;
+    return phone;
+  } else {
+    console.log(
+      "ERROR",
+      profile_api_response.status + " " + profile_api_response.statusText
+    );
+    if (
+      profile_api_response.status == 429 ||
+      profile_api_response.status >= 500
+    ) {
+      console.log(
+        `${id_type}=${id}  Profile API retryable error:  ${profile_api_response.status}  ${profile_api_response.statusText}`
+      );
+      throw new RetryError(
+        `${id_type}=${id}  Profile API retryable error:  ${profile_api_response.status}  ${profile_api_response.statusText}`
+      );
+    } else {
+      console.log(
+        `${id_type}=${id}  Profile API non retryable error:  ${profile_api_response.status}  ${profile_api_response.statusText}`
+      );
+      throw new ValidationError(
+        `${id_type}=${id}  Profile API non retryable error:  ${profile_api_response.status}  ${profile_api_response.statusText}`
+      );
+    }
   }
 }

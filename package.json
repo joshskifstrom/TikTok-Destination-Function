@@ -10,7 +10,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "async": "^3.2.4",
+    "btoa": "^1.2.1",
     "crypto": "^1.0.1",
+    "lodash": "^4.17.21",
     "node-fetch": "^3.3.0"
   }
 }
