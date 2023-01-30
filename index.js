@@ -5,7 +5,7 @@ import lodash from "lodash";
 
 let body = [
   {
-    anonymousId: "3cc730e6-60b6-4da7-861e-bcb463b9e8dd",
+    anonymousId: "1a1fd9fd-124f-4e73-bf53-2dc565a62ccf",
     context: {
       library: {
         name: "unknown",
@@ -31,7 +31,7 @@ let body = [
     sentAt: null,
     timestamp: "2022-12-20T06:15:48.929Z",
     traits: {
-      tiktok_all_members: true,
+      tiktok_all_members: false,
       email: "vortexdrift150@fake.com",
     },
     type: "identify",
@@ -98,7 +98,7 @@ let body = [
     sentAt: null,
     timestamp: "2022-12-20T06:15:48.643Z",
     traits: {
-      tiktok_all_members: true,
+      tiktok_all_members: false,
       email: "a0903939867@fake.com",
     },
     type: "identify",
@@ -155,62 +155,59 @@ let addMappingArray = [];
 let deleteMappingArray = [];
 
 //Design Elements To Add
-// Phone Number --
 // Auto Create Audience
 // Auto Delete Audience?
 
 async function onBatch(body, settings) {
-  //get computation key
+  //get computation key based on first object in the array
   let computationKey = body[0].context.personas.computation_key;
   for (const user of body) {
-    //if userId is not present use anonId to set externalId
-    let externalId;
-    if (!user.userId) {
-      externalId = `anonymous_id:${user.anonymousId}`;
-    } else {
-      externalId = `user_id:${user.userId}`;
-    }
+    if (user.type == "identify") {
+      //to collect telephone (profile api) if userId is not present use anonId to set externalId
+      let externalId;
+      if (!user.userId) {
+        externalId = `anonymous_id:${user.anonymousId}`;
+      } else {
+        externalId = `user_id:${user.userId}`;
+      }
 
-    let phoneNumber = await (
-      await profileApiHttpRequest(externalId, settings)
-    ).toString();
-    console.log("Phone Number", phoneNumber);
+      let phoneNumber = await (
+        await getPhoneNumber(externalId, settings)
+      ).toString();
+      console.log("Phone Number", phoneNumber);
 
-    //update computation key to boolean value
-    let computationKeyValue = user.traits[computationKey];
+      //update computation key to boolean value
+      let computationKeyValue = user.traits[computationKey];
 
-    //console.log("computationKeyValue", computationKeyValue);
-
-    if (computationKeyValue) {
-      addMappingArray.push([
-        {
-          id: sha256Hash(user.traits.email), // This is the SHA256 of email for User 1
-          id_type: "EMAIL_SHA256",
-          audience_ids: [settings.audienceId],
-        },
-        {
-          id: sha256Hash(phoneNumber), // This is the SHA256 of phone for User 1
-          id_type: "PHONE_SHA256",
-          audience_ids: [settings.audienceId],
-        },
-      ]);
-    } else {
-      deleteMappingArray.push([
-        {
-          id: sha256Hash(user.traits.email), // This is the SHA256 of email for User 1
-          id_type: "EMAIL_SHA256",
-          audience_ids: [settings.audienceId],
-        },
-        {
-          id: sha256Hash(phoneNumber), // This is the SHA256 of email for User 1
-          id_type: "PHONE_SHA256",
-          audience_ids: [settings.audienceId],
-        },
-      ]);
+      if (computationKeyValue) {
+        addMappingArray.push([
+          {
+            id: sha256Hash(user.traits.email), // This is the SHA256 of email for User 1
+            id_type: "EMAIL_SHA256",
+            audience_ids: [settings.audienceId],
+          },
+          {
+            id: sha256Hash(phoneNumber), // This is the SHA256 of phone for User 1
+            id_type: "PHONE_SHA256",
+            audience_ids: [settings.audienceId],
+          },
+        ]);
+      } else {
+        deleteMappingArray.push([
+          {
+            id: sha256Hash(user.traits.email), // This is the SHA256 of email for User 1
+            id_type: "EMAIL_SHA256",
+            audience_ids: [settings.audienceId],
+          },
+          {
+            id: sha256Hash(phoneNumber), // This is the SHA256 of email for User 1
+            id_type: "PHONE_SHA256",
+            audience_ids: [settings.audienceId],
+          },
+        ]);
+      }
     }
   }
-  //console.log("addMappingArray", addMappingArray);
-  //console.log("deleteMappingArray", deleteMappingArray);
 
   //add batch data body to tiktok json payload
   let addMappingBody = {
@@ -279,8 +276,8 @@ async function tiktokHttpRequest(body, set) {
   }
 }
 
-async function profileApiHttpRequest(externalId, settings) {
-  let endpoint = `https://profiles.segment.com/v1/spaces/${settings.engageSpaceId}/collections/users/profiles/${externalId}/traits?limit=200`;
+async function getPhoneNumber(externalId, settings) {
+  let endpoint = `https://profiles.segment.com/v1/spaces/${settings.engageSpaceId}/collections/users/profiles/${externalId}/traits?verbose=true&limit=200`;
 
   let profile_api_response = await fetch(endpoint, {
     headers: {
@@ -294,12 +291,30 @@ async function profileApiHttpRequest(externalId, settings) {
   if (profile_api_response.ok) {
     let json = await profile_api_response.json();
     let traits = json.traits;
-    let phone;
+    //extract all phone / mobile numbers from traits object
+    const obj = traits;
+    let newObj = Object.keys(obj).reduce((acc, key) => {
+      if (
+        key.slice(0, 5).toLowerCase() == "phone" ||
+        key.slice(0, 6).toLowerCase() == "mobile"
+      ) {
+        acc.push(obj[key]);
+      }
+      return acc;
+    }, []);
 
-    //check to see if phone number is a trait on the user
-    phone =
-      traits.phone | traits.phone_number | traits.mobile | traits.mobile_number;
-    return phone;
+    let newArr = [{ updated_at: "1900-01-10" }]; //default old date to start so array isn't empty
+    //collect last updated phone number
+    newObj.forEach((value) => {
+      if (Date.parse(newArr[0].updated_at) < Date.parse(value.updated_at)) {
+        newArr.pop();
+        newArr.push(value);
+      }
+    });
+    if (newArr[0].value != undefined) {
+      // in case there is no phone number build undefined logic
+      return newArr[0].value;
+    } else return "";
   } else {
     console.log(
       "ERROR",

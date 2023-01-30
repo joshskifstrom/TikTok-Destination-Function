@@ -1,1 +1,1 @@
-async
+console.log(newObj);
