@@ -31,7 +31,7 @@ let body = [
     sentAt: null,
     timestamp: "2022-12-20T06:15:48.929Z",
     traits: {
-      tiktok_all_members: false,
+      tiktok_all_members: true,
       email: "vortexdrift150@fake.com",
     },
     type: "identify",
@@ -154,10 +154,6 @@ let settings = {
 let addMappingArray = [];
 let deleteMappingArray = [];
 
-//Design Elements To Add
-// Auto Create Audience
-// Auto Delete Audience?
-
 async function onBatch(body, settings) {
   //get computation key based on first object in the array
   let computationKey = body[0].context.personas.computation_key;
@@ -178,6 +174,11 @@ async function onBatch(body, settings) {
 
       //update computation key to boolean value
       let computationKeyValue = user.traits[computationKey];
+
+      //account for blank email scenario
+      if (typeof user.traits.email === "undefined") {
+        user.traits.email = "";
+      }
 
       if (computationKeyValue) {
         addMappingArray.push([

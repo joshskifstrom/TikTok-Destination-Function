@@ -1,1 +1,1 @@
-console.log(newObj);
+email: "vortexdrift150@fake.com",
