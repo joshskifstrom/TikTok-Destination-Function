@@ -277,6 +277,7 @@ async function tiktokHttpRequest(body, set) {
   }
 }
 
+//HTTP Request
 async function getPhoneNumber(externalId, settings) {
   let endpoint = `https://profiles.segment.com/v1/spaces/${settings.engageSpaceId}/collections/users/profiles/${externalId}/traits?verbose=true&limit=200`;
 
